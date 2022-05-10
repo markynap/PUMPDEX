@@ -651,14 +651,19 @@ contract PancakeRouter is IPancakeRouter02 {
         returns (uint[] memory amounts)
     {
         require(path[0] == WETH, 'PancakeRouter: INVALID_PATH');
-        // ADD FEE IN HERE
+        uint fee = feeCollector.getFeeForProject(path[1]);
+        uint fee_ = fee == 0 ? 0 : msg.value.mul(fee).div(FEE_DENOMINATOR);
+        if (fee_ > 0) {
+            feeCollector.registerFee{value: fee_}(path[1]);
+        }
+        uint sendAmt = msg.value.sub(fee_);
         amounts = PancakeLibrary.getAmountsIn(factory, amountOut, path);
-        require(amounts[0] <= msg.value, 'PancakeRouter: EXCESSIVE_INPUT_AMOUNT');
+        require(amounts[0] <= sendAmt, 'PancakeRouter: EXCESSIVE_INPUT_AMOUNT');
         IWETH(WETH).deposit{value: amounts[0]}();
         assert(IWETH(WETH).transfer(PancakeLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
         _swap(amounts, path, to);
         // refund dust eth, if any
-        if (msg.value > amounts[0]) TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]);
+        if (sendAmt > amounts[0]) TransferHelper.safeTransferETH(msg.sender, sendAmt - amounts[0]);
     }
 
     // **** SWAP (supporting fee-on-transfer tokens) ****
